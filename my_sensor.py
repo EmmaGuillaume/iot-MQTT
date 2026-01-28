@@ -9,8 +9,8 @@ BROKER = "10.33.15.158"
 PORT = 1883
 DEVICE_ID = socket.gethostname()
 client = mqtt.Client(
- mqtt.CallbackAPIVersion.VERSION2,
- client_id=f"sensor-{DEVICE_ID}"
+    mqtt.CallbackAPIVersion.VERSION2,
+    client_id=f"subscriber-{DEVICE_ID}"
 )
 
 
@@ -54,17 +54,72 @@ def lire_metriques():
 # 6. Subscriber : réception et traitement
 #####################################################
 
+storage = {}
 
+def on_message(client, userdata, msg):
+    data = json.loads(msg.payload.decode())
+    device_id = data["device_id"]
+
+    if device_id not in storage:
+        storage[device_id] = {
+            "metrics": {},
+            "timestamp": "",
+            "message_count": 0
+        }
+    # on met les données dans le storage correspondant au device_id
+    storage[device_id]["metrics"] = data["metrics"]
+    storage[device_id]["timestamp"] = data["timestamp"]
+    storage[device_id]["message_count"] += 1
+
+
+
+client.connect(BROKER, PORT)
+client.on_message = on_message
+client.subscribe("pc/sensors/#")
+client.loop_start()
+
+
+
+def top3_subscribers():
+    # si le storage est vide (donc au lancement)
+    if not storage:
+        print("j'ai rien recu")
+        return
+    
+    
+    #tri le storage par cpu et on prend les 3 premiers
+    top3 = sorted(
+        storage.items(),
+        key=lambda x: x[1]["metrics"].get("cpu_usage_percent", 0),
+        reverse=True
+    )[:3]
+
+    print("\n TOP 3 cpu")
+    for i, (device_id, data) in enumerate(top3, 1):
+        cpu = data["metrics"].get("cpu_usage_percent", "N/A")
+        print(f"{device_id} - CPU : {cpu}%")
+
+        
+#####################################################
 
 
 while True:
-    # publication des métriques
-    client.publish(f"pc/sensors/{DEVICE_ID}", json.dumps({
-        "device_id": DEVICE_ID,
-        "timestamp": datetime.datetime.now().isoformat(),
-        "metrics": lire_metriques()
-    }))
-    print(lire_metriques())
     
-    #attend 5 secondes avant de finir la boucle 
-    time.sleep(5)
+    # client.publish(f"pc/sensors/{DEVICE_ID}", json.dumps({
+    #     "device_id": DEVICE_ID,
+    #     "timestamp": datetime.datetime.now().isoformat(),
+    #     "metrics": lire_metriques()
+    # }))
+    # print(lire_metriques())
+    
+    client.publish(
+        f"pc/sensors/{DEVICE_ID}",
+        json.dumps({
+            "device_id": DEVICE_ID,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "metrics": lire_metriques()
+        })
+    )
+
+    top3_subscribers()
+    time.sleep(2)
