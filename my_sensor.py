@@ -96,8 +96,10 @@ def top3_subscribers():
 
     print("\n TOP 3 cpu")
     for i, (device_id, data) in enumerate(top3, 1):
+        memory = data["metrics"].get("memory_usage_percent", "N/A")
         cpu = data["metrics"].get("cpu_usage_percent", "N/A")
-        print(f"{device_id} - CPU : {cpu}%")
+        average = (cpu + memory) / 2
+        print(f"{device_id} - moyenne : {average:2f}%")
 
         
 #####################################################
